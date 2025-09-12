@@ -49,7 +49,15 @@ namespace ProductionTrackerAPI.Models
         [Required]
         public int TableTotalPackage { get; set; }
         
-        // 2. Kalite verileri
+        public int SampleFormCount { get; set; }
+        public int RepeatFormCount { get; set; }
+        public int YesterdayRemainingCount { get; set; }
+        public int UnmatchedProductCount { get; set; }
+        public int AQualityProductCount { get; set; }
+        public int ThreadedProductCount { get; set; }
+        public int StainedProductCount { get; set; }
+        public int CountTakenFromMachine { get; set; } 
+        
         public int MeasurementError { get; set; }
         public int KnittingError { get; set; }
         public int ToeDefect { get; set; }
@@ -61,21 +69,14 @@ namespace ProductionTrackerAPI.Models
         [Required]
         public int CountTakenFromTable { get; set; }
         
-        // Hesaplanan değerler
         public decimal MeasurementErrorRate { get; set; }
         public decimal KnittingErrorRate { get; set; }
         public decimal ToeDefectRate { get; set; }
         public decimal OtherDefectRate { get; set; }
         public decimal GeneralErrorRate { get; set; }
         
-        // Fotoğraf yolu
-        [StringLength(500)]
-        public string? PhotoPath { get; set; }
-        
-        // Not alanı
         public string? Note { get; set; }
         
-        // Zaman damgası
         public DateTime CreatedAt { get; set; } = DateTime.Now;
         public DateTime? UpdatedAt { get; set; }
     }

@@ -1,117 +1,190 @@
 # Production Tracker API
 
-A .NET 9 Web API for tracking production data, defects, and generating reports.
+A modern .NET 9 Web API for tracking production data using Excel as a database backend.
 
 ## Features
 
-- Production entry management with photo uploads
-- Defect tracking and error rate calculations
-- Time-limited editing capabilities (1 hour after creation)
-- Production summary reports
-- Date range filtering
-- Photo management for production entries
+- ?? **Production Entry Management**: Create, read, update, and delete production entries
+- ?? **Statistics Dashboard**: Get comprehensive production statistics and analytics  
+- ?? **Filtering & Pagination**: Filter entries by machine, shift, date range with pagination support
+- ?? **RESTful API**: Clean REST endpoints with proper HTTP status codes
+- ?? **Excel Integration**: Uses Excel files for data persistence with ClosedXML
+- ?? **Swagger Documentation**: Interactive API documentation
+- ?? **CORS Support**: Configured for cross-origin requests
 
-## Technologies
+## Technology Stack
 
-- .NET 9
-- ASP.NET Core Web API
-- Entity Framework Core
-- SQL Server
-- Swagger/OpenAPI
+- **.NET 9**: Latest .NET framework
+- **ASP.NET Core Web API**: RESTful web services
+- **ClosedXML**: Excel file manipulation
+- **Swagger/OpenAPI**: API documentation
+- **Excel Database**: Uses Excel files for data storage
+
+## Project Structure
+
+```
+ProductionTrackerAPI/
+??? Controllers/
+?   ??? ProductionController.cs    # Main API controller
+??? Models/
+?   ??? ProductionEntry.cs         # Production entry model
+?   ??? ProductionEntryDto.cs      # Data transfer object
+??? Services/
+?   ??? IProductionService.cs      # Service interface
+?   ??? ExcelProductionService.cs  # Excel-based service implementation
+??? Properties/
+?   ??? launchSettings.json        # Launch configuration
+??? Data/                          # Excel data files (auto-created)
+??? Program.cs                     # Application entry point
+??? appsettings.json              # Configuration
+??? ProductionTrackerAPI.csproj   # Project file
+```
+
+## API Endpoints
+
+### Production Entries
+- `POST /api/production/entries` - Create new production entry
+- `GET /api/production/entries` - Get all entries with filtering and pagination
+- `GET /api/production/entries/{id}` - Get specific entry by ID
+- `PUT /api/production/entries/{id}` - Update existing entry
+- `DELETE /api/production/entries/{id}` - Delete entry
+
+### Analytics & Utilities
+- `GET /api/production/entries/summary` - Get summary list of entries
+- `GET /api/production/statistics` - Get production statistics
+- `GET /api/production/machines` - Get list of machine numbers
+- `GET /api/production/excel-info` - Get Excel file information
+
+## Query Parameters
+
+For the GET `/api/production/entries` endpoint:
+- `page` (int): Page number (default: 1)
+- `pageSize` (int): Items per page (default: 10)
+- `machineNo` (string): Filter by machine number
+- `shift` (int): Filter by shift number
+- `startDate` (DateTime): Filter entries from this date
+- `endDate` (DateTime): Filter entries until this date
+
+## Production Entry Model
+
+```json
+{
+  "id": 1,
+  "date": "2024-01-15T00:00:00",
+  "machineNo": "M001",
+  "shift": 1,
+  "modelNo": "MODEL123",
+  "sizeNo": "SIZE456",
+  "formCount": 100,
+  "defect1": 2,
+  "defect2": 1,
+  "defect3": 0,
+  "defect4": 1,
+  "defect5": 0,
+  "defect6": 0,
+  "defect7": 0,
+  "defect8": 0,
+  "defect9": 0,
+  "defect10": 0,
+  "totalDefects": 4,
+  "generalErrorRate": 4.0,
+  "createdAt": "2024-01-15T10:30:00"
+}
+```
 
 ## Getting Started
 
 ### Prerequisites
-
 - .NET 9 SDK
-- SQL Server (LocalDB or full instance)
+- Visual Studio 2022 or Visual Studio Code
 
 ### Installation
 
-1. Clone the repository
+1. Clone the repository:
 ```bash
 git clone https://github.com/Taha1022-sys/ProductionTrackerAPI.git
 cd ProductionTrackerAPI
 ```
 
-2. Update the connection string in `appsettings.json`
-```json
-{
-  "ConnectionStrings": {
-    "DefaultConnection": "Server=(localdb)\\mssqllocaldb;Database=ProductionTrackerDB;Trusted_Connection=true;MultipleActiveResultSets=true"
-  }
-}
-```
-
-3. Run database migrations
+2. Restore dependencies:
 ```bash
-dotnet ef database update
+dotnet restore
 ```
 
-4. Run the application
+3. Run the application:
 ```bash
 dotnet run
 ```
 
-The API will be available at `http://localhost:5197` and Swagger UI at the root URL.
+The API will be available at:
+- HTTP: `http://localhost:5002`
+- Swagger UI: `http://localhost:5002` (in development mode)
 
-## API Endpoints
+### Development Configuration
 
-### Production Entries
-- `GET /api/production` - Get all production entries
-- `GET /api/production/{id}` - Get production entry by ID
-- `POST /api/production` - Create new production entry
-- `PUT /api/production/{id}` - Update production entry (time-limited)
-- `GET /api/production/{id}/editability` - Check if entry can be edited
-- `GET /api/production/date-range` - Get entries by date range
+The application includes two launch profiles:
+- **http**: Runs on `http://0.0.0.0:5002` with browser launch
+- **network**: Runs on `http://172.20.10.7:5002` without browser launch
 
-### Reports
-- `GET /api/production/summary` - Get production summary
-- `GET /api/production/created-date-range` - Get entries by creation date range
+## Data Storage
 
-## Models
+The application uses Excel files for data persistence:
+- Data is stored in the `Data/` folder
+- Primary file: `ProductionEntries.xlsx`
+- Files are automatically created when needed
+- Excel format allows easy data inspection and backup
 
-### ProductionEntry
-Main production data model including:
-- Machine and shift information
-- Production counts and defects
-- Error rates and calculations
-- Photo path and notes
-- Creation and update timestamps
+## Configuration
 
-### ProductionSummary
-Aggregated production statistics including:
-- Total production counts
-- Error counts and rates by type
-- Overall error percentages
+### CORS
+The application is configured to accept requests from any origin in development mode. Modify the CORS policy in `Program.cs` for production use.
 
-## Business Rules
+### Logging
+Standard ASP.NET Core logging is configured. Modify `appsettings.json` to adjust log levels.
 
-- Production entries can only be edited for 1 hour after creation
-- Photos are automatically managed (upload/delete)
-- Error rates are automatically calculated
-- Production summaries are updated after each entry modification
+## Development
 
-## File Structure
+### Adding New Features
+1. Update the model classes in `Models/`
+2. Extend the service interface `IProductionService`
+3. Implement the functionality in `ExcelProductionService`
+4. Add new controller actions as needed
 
-```
-ProductionTrackerAPI/
-??? Controllers/         # API controllers
-??? Data/               # Database context
-??? Migrations/         # EF Core migrations
-??? Models/             # Data models and DTOs
-??? Services/           # Business logic services
-??? Program.cs          # Application entry point
+### Testing
+Access the Swagger UI at the root URL when running in development mode to test all endpoints interactively.
+
+## Deployment
+
+### Production Considerations
+1. Update CORS policy for production domains
+2. Configure proper logging levels
+3. Set up proper error handling
+4. Consider database migration from Excel to a proper database for large-scale use
+5. Configure HTTPS redirection properly
+
+### Docker Support
+The application can be containerized. Create a `Dockerfile`:
+
+```dockerfile
+FROM mcr.microsoft.com/dotnet/aspnet:9.0
+WORKDIR /app
+COPY . .
+EXPOSE 80
+ENTRYPOINT ["dotnet", "ProductionTrackerAPI.dll"]
 ```
 
 ## Contributing
 
 1. Fork the repository
 2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
 
 ## License
 
-This project is licensed under the MIT License.
+This project is open source. See the LICENSE file for details.
+
+## Contact
+
+For questions or support, please open an issue on GitHub.

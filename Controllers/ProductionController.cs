@@ -1,6 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using ProductionTrackerAPI.Data;
 using ProductionTrackerAPI.Models;
 using ProductionTrackerAPI.Services;
 
@@ -11,20 +9,19 @@ namespace ProductionTrackerAPI.Controllers
     public class ProductionController : ControllerBase
     {
         private readonly IProductionService _productionService;
-        private readonly ProductionDbContext _dbContext;
 
-        public ProductionController(IProductionService productionService, ProductionDbContext dbContext)
+        public ProductionController(IProductionService productionService)
         {
             _productionService = productionService;
-            _dbContext = dbContext;
         }
 
+        // Yeni üretim kaydý oluþtur
         [HttpPost("entries")]
-        public async Task<ActionResult<ProductionEntry>> CreateProductionEntry([FromForm] ProductionEntryDto dto)
+        public async Task<ActionResult<ProductionEntry>> CreateProductionEntry([FromBody] ProductionEntryDto dto)
         {
             try
             {
-                var entry = await _productionService.CreateProductionEntryWithPhotoAsync(dto, dto.Photo);
+                var entry = await _productionService.CreateProductionEntryAsync(dto);
                 return CreatedAtAction(nameof(GetProductionEntry), new { id = entry.Id }, entry);
             }
             catch (Exception ex)
@@ -33,8 +30,166 @@ namespace ProductionTrackerAPI.Controllers
             }
         }
 
+        // Tüm üretim kayýtlarýný getir (sayfalama ile)
+        [HttpGet("entries")]
+        public async Task<ActionResult<object>> GetAllProductionEntries(
+            [FromQuery] int page = 1, 
+            [FromQuery] int pageSize = 10,
+            [FromQuery] string? machineNo = null,
+            [FromQuery] int? shift = null,
+            [FromQuery] DateTime? startDate = null,
+            [FromQuery] DateTime? endDate = null)
+        {
+            try
+            {
+                var allEntries = await _productionService.GetAllProductionEntriesAsync();
+                
+                // Filtreleme
+                var filteredEntries = allEntries.AsQueryable();
+                
+                if (!string.IsNullOrEmpty(machineNo))
+                {
+                    filteredEntries = filteredEntries.Where(e => e.MachineNo.Contains(machineNo, StringComparison.OrdinalIgnoreCase));
+                }
+                
+                if (shift.HasValue)
+                {
+                    filteredEntries = filteredEntries.Where(e => e.Shift == shift.Value);
+                }
+                
+                if (startDate.HasValue)
+                {
+                    filteredEntries = filteredEntries.Where(e => e.Date.Date >= startDate.Value.Date);
+                }
+                
+                if (endDate.HasValue)
+                {
+                    filteredEntries = filteredEntries.Where(e => e.Date.Date <= endDate.Value.Date);
+                }
+                
+                var totalCount = filteredEntries.Count();
+                var entries = filteredEntries
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
+                
+                var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+                
+                return Ok(new
+                {
+                    items = entries,
+                    totalCount = totalCount,
+                    pageNumber = page,
+                    pageSize = pageSize,
+                    totalPages = totalPages
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        // Özet liste görünümü için basit kayýt listesi
+        [HttpGet("entries/summary")]
+        public async Task<ActionResult<List<object>>> GetProductionEntriesSummary()
+        {
+            try
+            {
+                var entries = await _productionService.GetAllProductionEntriesAsync();
+                
+                var summaryList = entries.Select(e => new
+                {
+                    id = e.Id,
+                    date = e.Date.ToString("dd.MM.yyyy"),
+                    machineNo = e.MachineNo,
+                    shift = e.Shift,
+                    modelNo = e.ModelNo,
+                    sizeNo = e.SizeNo,
+                    formCount = e.FormCount,
+                    totalDefects = e.TotalDefects,
+                    generalErrorRate = e.GeneralErrorRate,
+                    createdAt = e.CreatedAt.ToString("dd.MM.yyyy HH:mm")
+                }).ToList();
+                
+                return Ok(summaryList);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        // Makine numaralarýný getir (dropdown için)
+        [HttpGet("machines")]
+        public async Task<ActionResult<List<string>>> GetMachineNumbers()
+        {
+            try
+            {
+                var entries = await _productionService.GetAllProductionEntriesAsync();
+                var machines = entries.Select(e => e.MachineNo).Distinct().OrderBy(m => m).ToList();
+                return Ok(machines);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        // Ýstatistik bilgileri
+        [HttpGet("statistics")]
+        public async Task<ActionResult<object>> GetStatistics()
+        {
+            try
+            {
+                var entries = await _productionService.GetAllProductionEntriesAsync();
+                
+                var stats = new
+                {
+                    totalEntries = entries.Count,
+                    totalFormCount = entries.Sum(e => e.FormCount),
+                    totalDefects = entries.Sum(e => e.TotalDefects),
+                    averageErrorRate = entries.Any() ? Math.Round(entries.Average(e => e.GeneralErrorRate), 2) : 0,
+                    machineCount = entries.Select(e => e.MachineNo).Distinct().Count(),
+                    lastEntryDate = entries.Any() ? entries.Max(e => e.CreatedAt).ToString("dd.MM.yyyy HH:mm") : "Kayýt yok",
+                    
+                    // Günlük üretim sayýlarý (son 7 gün)
+                    dailyProduction = entries
+                        .Where(e => e.Date >= DateTime.Now.AddDays(-7))
+                        .GroupBy(e => e.Date.Date)
+                        .Select(g => new
+                        {
+                            date = g.Key.ToString("dd.MM.yyyy"),
+                            count = g.Count(),
+                            totalForms = g.Sum(e => e.FormCount)
+                        })
+                        .OrderBy(x => x.date)
+                        .ToList()
+                };
+                
+                return Ok(stats);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        // Belirli bir üretim kaydýný getir
+        [HttpGet("entries/{id}")]
+        public async Task<ActionResult<ProductionEntry>> GetProductionEntry(int id)
+        {
+            var entry = await _productionService.GetProductionEntryByIdAsync(id);
+            if (entry == null)
+            {
+                return NotFound(new { message = "Kayýt bulunamadý." });
+            }
+            return Ok(entry);
+        }
+
+        // Üretim kaydýný güncelle
         [HttpPut("entries/{id}")]
-        public async Task<ActionResult<ProductionEntry>> UpdateProductionEntry(int id, [FromForm] ProductionEntryUpdateDto dto)
+        public async Task<ActionResult<ProductionEntry>> UpdateProductionEntry(int id, [FromBody] ProductionEntryDto dto)
         {
             try
             {
@@ -45,193 +200,53 @@ namespace ProductionTrackerAPI.Controllers
                 }
                 return Ok(updatedEntry);
             }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
             catch (Exception ex)
             {
-                return BadRequest(new { message = $"Güncellem hatasý: {ex.Message}" });
+                return BadRequest(new { message = $"Güncelleme hatasý: {ex.Message}" });
             }
         }
 
-        [HttpGet("entries/{id}/editability")]
-        public async Task<ActionResult<EditabilityCheckDto>> CheckEditability(int id)
-        {
-            var result = await _productionService.CheckEditabilityAsync(id);
-            return Ok(result);
-        }
-
-        [HttpGet("entries")]
-        public async Task<ActionResult<List<ProductionEntry>>> GetAllProductionEntries()
-        {
-            var entries = await _productionService.GetAllProductionEntriesAsync();
-            return Ok(entries);
-        }
-
-        [HttpGet("entries/{id}")]
-        public async Task<ActionResult<ProductionEntry>> GetProductionEntry(int id)
-        {
-            var entry = await _productionService.GetProductionEntryByIdAsync(id);
-            if (entry == null)
-            {
-                return NotFound();
-            }
-            return Ok(entry);
-        }
-
-        [HttpGet("entries/{id}/view")]
-        public async Task<ActionResult<ProductionEntryViewDto>> GetProductionEntryView(int id)
-        {
-            var entry = await _productionService.GetProductionEntryViewByIdAsync(id);
-            if (entry == null)
-            {
-                return NotFound();
-            }
-            return Ok(entry);
-        }
-
-        [HttpGet("summary")]
-        public async Task<ActionResult<ProductionSummary>> GetCurrentSummary()
-        {
-            var summary = await _productionService.GetCurrentSummaryAsync();
-            return Ok(summary);
-        }
-
-        [HttpGet("entries/date-range")]
-        public async Task<ActionResult<List<ProductionEntry>>> GetEntriesByDateRange(
-            [FromQuery] string startDate, 
-            [FromQuery] string endDate,
-            [FromQuery] string filterBy = "date", // "date" veya "created" seçenekleri
-            [FromQuery] string? startTime = null, // HH:mm formatýnda (örn: "08:30")
-            [FromQuery] string? endTime = null)   // HH:mm formatýnda (örn: "17:30")
+        // Üretim kaydýný sil
+        [HttpDelete("entries/{id}")]
+        public async Task<ActionResult> DeleteProductionEntry(int id)
         {
             try
             {
-                // 1. Tarihleri parse et
-                if (string.IsNullOrWhiteSpace(startDate) || string.IsNullOrWhiteSpace(endDate))
-                    return BadRequest("Baþlangýç ve bitiþ tarihleri gereklidir.");
-
-                DateTime start;
-                DateTime end;
-
-                // Baþlangýç tarihi parse
-                if (!DateTime.TryParse(startDate, out start))
-                    return BadRequest("Geçersiz baþlangýç tarihi formatý.");
-
-                // Bitiþ tarihi parse
-                if (!DateTime.TryParse(endDate, out end))
-                    return BadRequest("Geçersiz bitiþ tarihi formatý.");
-
-                // Saat bilgilerini iþle
-                if (!string.IsNullOrWhiteSpace(startTime))
+                var success = await _productionService.DeleteProductionEntryAsync(id);
+                if (!success)
                 {
-                    if (TimeSpan.TryParse(startTime, out TimeSpan startTimeSpan))
-                    {
-                        start = start.Date.Add(startTimeSpan);
-                    }
-                    else
-                    {
-                        return BadRequest("Geçersiz baþlangýç saati formatý. HH:mm formatýnda olmalýdýr.");
-                    }
+                    return NotFound(new { message = "Kayýt bulunamadý." });
                 }
-                else
-                {
-                    // Sadece tarih gelirse baþlangýç saati 00:00:00
-                    start = start.Date;
-                }
-
-                if (!string.IsNullOrWhiteSpace(endTime))
-                {
-                    if (TimeSpan.TryParse(endTime, out TimeSpan endTimeSpan))
-                    {
-                        end = end.Date.Add(endTimeSpan);
-                    }
-                    else
-                    {
-                        return BadRequest("Geçersiz bitiþ saati formatý. HH:mm formatýnda olmalýdýr.");
-                    }
-                }
-                else
-                {
-                    // Sadece tarih gelirse bitiþ saati 23:59:59
-                    end = end.Date.AddDays(1).AddMilliseconds(-1);
-                }
-
-                // 2. Filtreleme alanýný belirle ve sorgu
-                List<ProductionEntry> entries;
-                
-                if (filterBy.ToLower() == "created")
-                {
-                    // CreatedAt alanýna göre filtrele (saat dahil)
-                    entries = await _dbContext.ProductionEntries
-                        .Where(e => e.CreatedAt >= start && e.CreatedAt <= end)
-                        .OrderByDescending(e => e.CreatedAt)
-                        .ToListAsync();
-                }
-                else
-                {
-                    // Date alanýna göre filtrele
-                    if (string.IsNullOrWhiteSpace(startTime) && string.IsNullOrWhiteSpace(endTime))
-                    {
-                        // Sadece tarih filtrelemesi (gün bazýnda)
-                        entries = await _dbContext.ProductionEntries
-                            .Where(e => e.Date.Date >= start.Date && e.Date.Date <= end.Date)
-                            .OrderByDescending(e => e.Date)
-                            .ThenByDescending(e => e.CreatedAt)
-                            .ToListAsync();
-                    }
-                    else
-                    {
-                        // Tarih + saat filtrelemesi (Date alaný + saat kontrolü CreatedAt üzerinden)
-                        entries = await _dbContext.ProductionEntries
-                            .Where(e => e.Date.Date >= start.Date && e.Date.Date <= end.Date && 
-                                       e.CreatedAt >= start && e.CreatedAt <= end)
-                            .OrderByDescending(e => e.Date)
-                            .ThenByDescending(e => e.CreatedAt)
-                            .ToListAsync();
-                    }
-                }
-
-                return Ok(entries);
+                return Ok(new { message = "Kayýt baþarýyla silindi." });
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = $"Filtreleme hatasý: {ex.Message}" });
+                return BadRequest(new { message = $"Silme hatasý: {ex.Message}" });
             }
         }
 
-        [HttpPost("summary/calculate")]
-        public async Task<ActionResult<ProductionSummary>> CalculateSummary()
+        // Excel dosyasýnýn yolunu getir (test amaçlý)
+        [HttpGet("excel-info")]
+        public async Task<ActionResult<object>> GetExcelInfo()
         {
-            var summary = await _productionService.CalculateAndUpdateSummaryAsync();
-            return Ok(summary);
-        }
-
-        // Test için - filtreleme parametrelerini göster
-        [HttpGet("entries/filter-info")]
-        public ActionResult GetFilterInfo()
-        {
-            return Ok(new
+            try
             {
-                FilterTypes = new[]
+                var entries = await _productionService.GetAllProductionEntriesAsync();
+                var dataFolder = Path.Combine(Directory.GetCurrentDirectory(), "Data");
+                var excelPath = Path.Combine(dataFolder, "ProductionEntries.xlsx");
+                
+                return Ok(new
                 {
-                    new { Value = "date", Label = "Üretim Tarihine Göre", Description = "Date alanýna göre filtreleme" },
-                    new { Value = "created", Label = "Kayýt Tarihine Göre", Description = "CreatedAt alanýna göre filtreleme" }
-                },
-                TimeFormat = "HH:mm (örn: 08:30, 17:45)",
-                Examples = new[]
-                {
-                    "Sadece tarih: ?startDate=2025-01-01&endDate=2025-01-31",
-                    "Tarih + saat (üretim): ?startDate=2025-01-01&endDate=2025-01-01&startTime=08:00&endTime=17:00&filterBy=date",
-                    "Tarih + saat (kayýt): ?startDate=2025-01-01&endDate=2025-01-01&startTime=08:00&endTime=17:00&filterBy=created"
-                },
-                EditInfo = new
-                {
-                    EditTimeLimit = "1 saat",
-                    Description = "Kayýtlar oluþturulduktan sonra 1 saat süreyle düzenlenebilir."
-                }
-            });
+                    excelPath = excelPath,
+                    fileExists = System.IO.File.Exists(excelPath),
+                    recordCount = entries.Count,
+                    lastModified = System.IO.File.Exists(excelPath) ? System.IO.File.GetLastWriteTime(excelPath).ToString("dd.MM.yyyy HH:mm:ss") : "Dosya bulunamadý"
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
     }
 }

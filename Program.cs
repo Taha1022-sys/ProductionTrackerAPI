@@ -1,17 +1,11 @@
-using Microsoft.EntityFrameworkCore;
-using ProductionTrackerAPI.Data;
 using ProductionTrackerAPI.Services;
-using ProductionTrackerAPI;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
-{
-    c.OperationFilter<FileUploadOperationFilter>();
-});
+builder.Services.AddSwaggerGen();
 
 // Add CORS
 builder.Services.AddCors(options =>
@@ -24,12 +18,8 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Add DbContext
-builder.Services.AddDbContext<ProductionDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
-
-// Add Services
-builder.Services.AddScoped<IProductionService, ProductionService>();
+// Excel tabanlý Production Service
+builder.Services.AddScoped<IProductionService, ExcelProductionService>();
 
 var app = builder.Build();
 
@@ -46,7 +36,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// Configure static file serving for uploaded photos
+// Enable static file serving
 app.UseStaticFiles();
 
 app.UseCors("AllowAll");
